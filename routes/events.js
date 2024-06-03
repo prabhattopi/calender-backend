@@ -5,20 +5,29 @@ const { google } = require('googleapis');
 const OAuth2 = google.auth.OAuth2;
 const dayjs = require('dayjs');
 
-// Google OAuth2 client setup
 const oauth2Client = new OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
+  'https://developers.google.com/oauthplayground'
 );
 
+// Set the refresh token from the OAuth Playground
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_CALENDAR_REFRESH_TOKEN,
+});
+
 // Middleware to check for Google OAuth2 token
-const checkAuth = (req, res, next) => {
+const checkAuth = async (req, res, next) => {
   if (req.headers.authorization) {
     oauth2Client.setCredentials({
       access_token: req.headers.authorization.split(' ')[1],
     });
-    next();
+    try {
+      await oauth2Client.getAccessToken();
+      next();
+    } catch (error) {
+      res.status(401).json({ message: 'Unauthorized', error: error.message });
+    }
   } else {
     res.status(401).json({ message: 'Unauthorized' });
   }
@@ -35,7 +44,6 @@ router.post('/', async (req, res) => {
     const newEvent = new Event(req.body);
     const savedEvent = await newEvent.save();
 
-    // Google Calendar Integration
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     const startDate = dayjs(savedEvent.date).toISOString();
@@ -97,7 +105,6 @@ router.put('/:id', async (req, res) => {
   try {
     const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
 
-    // Google Calendar Integration
     if (updatedEvent.googleEventId) {
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
@@ -134,9 +141,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const event = await Event.findByIdAndDelete(req.params.id);
-    console.log(event)
 
-    // Google Calendar Integration
     if (event && event.googleEventId) {
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
