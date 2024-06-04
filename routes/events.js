@@ -4,6 +4,7 @@ const Event = require('../models/Event');
 const { google } = require('googleapis');
 const OAuth2 = google.auth.OAuth2;
 const dayjs = require('dayjs');
+const { v4: uuidv4 } = require('uuid');
 
 const oauth2Client = new OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -43,6 +44,7 @@ router.post('/', async (req, res) => {
   try {
     const newEvent = new Event(req.body);
     const savedEvent = await newEvent.save();
+    console.log(savedEvent);
 
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
@@ -52,6 +54,8 @@ router.post('/', async (req, res) => {
     const googleEvent = {
       summary: savedEvent.title,
       description: savedEvent.description,
+      conferenceDataVersion: 1,
+
       start: {
         dateTime: startDate,
         timeZone: "Asia/Kolkata"
@@ -60,11 +64,18 @@ router.post('/', async (req, res) => {
         dateTime: endDate,
         timeZone: "Asia/Kolkata"
       },
+      conferenceData: {
+        createRequest: {requestId: uuidv4()},
+        "conferenceSolutionKey": {
+          "type": "hangoutsMeet"
+        },
+      },
+      'attendees': JSON.parse(savedEvent.participants),
     };
 
     const response = await calendar.events.insert({
       calendarId: 'primary',
-      requestBody: googleEvent,
+      resource: googleEvent,
     });
 
     savedEvent.googleEventId = response.data.id;
